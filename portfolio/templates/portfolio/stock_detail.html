@@ -1,0 +1,133 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ stock.symbol }} | Stock Details</title>
+  <link href="{% static 'css/output.css' %}" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+
+  <div class="container mx-auto py-10 px-4">
+    <h1 class="text-3xl font-bold mb-4">📊 {{ stock.name }} ({{ stock.symbol }})</h1>
+<div class="text-center my-4">
+    <h2 class="text-xl font-bold">Live Price: ₹<span id="live-price">--</span></h2>
+</div>
+    <div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
+      <canvas id="priceChart"></canvas>
+    </div>
+
+    <div class="mt-4">
+      <a href="{% url 'stock_list' %}" class="text-blue-600 dark:text-blue-400 underline">← Back to Portfolio</a>
+    </div>
+  </div>
+<div class="card mt-4 p-3 bg-white dark:bg-gray-800">
+  <h4 class="text-xl font-semibold mb-2">📝 Notes for {{ symbol }}</h4>
+
+  <!-- Existing Notes -->
+  {% if notes %}
+    <ul class="list-disc pl-5 space-y-2">
+      {% for note in notes %}
+        <li class="flex justify-between items-center">
+          <span>{{ note.created_at|date:"M d, Y H:i" }} – {{ note.content }}</span>
+          <form action="{% url 'delete_note' symbol=symbol note_id=note.id %}" method="post" onsubmit="return confirm('Delete this note?');" class="ml-4">
+            {% csrf_token %}
+            <button type="submit" class="text-red-500 hover:text-red-700 text-sm">🗑️ Delete</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-gray-500">No notes yet.</p>
+  {% endif %}
+
+  <!-- Add Note Form -->
+  <form method="post" action="{% url 'add_note' symbol=symbol %}" class="mt-4">
+    {% csrf_token %}
+    <label for="note-content" class="block text-sm font-medium mb-1">✏️ Add New Note:</label>
+    <textarea name="content" id="note-content" rows="2" class="w-full p-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white" required></textarea>
+    <button type="submit" class="mt-2 px-4 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+      ➕ Add Note
+    </button>
+  </form>
+</div>
+
+
+
+
+
+  <script>
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: {{ labels|safe }},
+        datasets: [{
+          label: 'Price (₹)',
+          data: {{ prices|safe }},
+          borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13, 110, 253, 0.2)',
+          fill: true,
+          tension: 0.3,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: '7-Day Price History'
+          }
+        }
+      }
+    });
+  </script>
+
+
+
+<script>
+    function fetchLivePrice() {
+        const symbol = "{{ stock.symbol }}";  // assuming you passed `stock` in context
+        fetch(`/api/live-price/${symbol}/`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.price) {
+                    document.getElementById("live-price").innerText = data.price.toFixed(2);
+                } else {
+                    document.getElementById("live-price").innerText = "Unavailable";
+                }
+            })
+            .catch(() => {
+                document.getElementById("live-price").innerText = "Error";
+            });
+    }
+
+    fetchLivePrice();
+    setInterval(fetchLivePrice, 10000);  // refresh every 10 seconds
+</script>
+<script>
+    const symbol = "{{ symbol }}";  // Make sure this is passed in context
+    const livePriceEl = document.getElementById("live-price");
+
+    function fetchLivePrice() {
+        fetch(`/api/price/${symbol}/`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.price) {
+                    livePriceEl.textContent = data.price.toFixed(2);
+                }
+            })
+            .catch(err => {
+                console.error('Price fetch error:', err);
+            });
+    }
+
+    fetchLivePrice(); // Initial fetch
+    setInterval(fetchLivePrice, 5000); // Update every 5s
+</script>
+
+
+</body>
+</html>

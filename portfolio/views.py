@@ -48,9 +48,9 @@ def edit_stock(request, symbol):
     return render(request, 'portfolio/edit_stock.html', {'form': form})
 
 def delete_stock(request, symbol):
-    stock = get_object_or_404(Stock, symbol=symbol)
-    stock.delete()
+    Stock.objects.filter(symbol=symbol).delete()
     return redirect('stock_list')
+
 
 
 
@@ -117,6 +117,10 @@ def stock_list(request):
     # ✅ Move these out of the loop
     total_current_value = sum(item['total_current_value'] for item in stock_data)
     net_gain_loss = total_current_value - total_invested
+    sorted_stocks = sorted(stock_data, key=lambda x: x['gain_loss'])
+    top_stock = max(stock_data, key=lambda x: x['gain_loss'], default=None)
+    worst_stock = min(stock_data, key=lambda x: x['gain_loss'], default=None)
+    daily_change = sum(s['gain_loss'] for s in stock_data)
 
     # ✅ Proper return context
     return render(request, 'portfolio/stock_list.html', {
@@ -128,6 +132,9 @@ def stock_list(request):
         'values': json.dumps(values),
         'total_current_value': round(total_current_value, 2),
         'net_gain_loss': round(net_gain_loss, 2),
+        'top_stock': top_stock,
+        'worst_stock': worst_stock,
+        'daily_change': round(daily_change,2),
     })
 
 
@@ -222,3 +229,63 @@ def export_csv(request):
     return response
 
 
+from django.http import JsonResponse
+import yfinance as yf
+
+def get_live_price(request, symbol):
+    try:
+        stock = yf.Ticker(symbol)
+        price = stock.info.get("regularMarketPrice", None)
+        return JsonResponse({'price': live_price})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+from django.shortcuts import render, get_object_or_404
+from .models import Stock
+from .models import Note
+
+def stock_detail(request, symbol):
+    stock = get_object_or_404(Stock, symbol=symbol)
+    notes = Note.objects.filter(symbol=symbol).order_by('-created_at')
+    #Static dummy data for now
+
+    historical_data = {
+        "labels": ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7"],
+        "prices": [120, 125, 123, 130, 128, 135, 138]
+    }
+    chart_data = {
+        "labels": ["2024-07-01", "2024-07-02", "2024-07-03", "2024-07-04", "2024-07-05"],
+        "prices": [150, 152, 149, 153, 155]
+    }
+    if request.method == "POST":
+        content = request.POST.get("note")
+        if content:
+            Note.objects.create(symbol=symbol, content=content)
+
+    return render(request, "portfolio/stock_detail.html", {
+        "stock": stock,
+        "notes": notes,
+        "labels": historical_data["labels"],
+        "prices": historical_data["prices"],
+        "symbol": symbol,
+        "dummy_data": chart_data,
+    })
+
+# views.py
+from django.shortcuts import get_object_or_404, redirect
+from .models import Note
+
+def delete_note(request, symbol, note_id):
+    note = get_object_or_404(Note, id=note_id, symbol=symbol)
+    note.delete()
+    return redirect('stock_detail', symbol=symbol)
+
+from .models import Note
+
+def add_note(request, symbol):
+    if request.method == 'POST':
+        content = request.POST.get('content')
+        if content:
+            Note.objects.create(symbol=symbol, content=content)
+    return redirect('stock_detail', symbol=symbol)
